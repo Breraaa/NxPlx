@@ -1,11 +1,83 @@
-import { Component, h } from 'preact';
+import { Component, h } from "preact";
 import "shaka-player/dist/controls.css";
 import shaka from "shaka-player/dist/shaka-player.ui";
 import { EventBroker } from "../../EventBroker";
 
-interface PlayerEvent {
-    type:'state_changed'|'volume_changed'|'subtitle_changed'|'muted'
-    value:string|number
+
+interface TextTrack {
+    displayName: string
+    language: string
+    path: string
+}
+
+interface Mp4Manifest {
+    title: string
+    path: string
+    textTracks: TextTrack[],
+    time: number
+}
+
+let id = 0;
+
+class SimpleManifestParser {
+    public static register() {
+        shaka.media.ManifestParser.registerParserByMime("manifest/mp4", SimpleManifestParser);
+    }
+
+    private config: any;
+
+    public configure(config) {
+        this.config = config;
+    }
+
+    public start(manifest, playerInterface) {
+        console.log("start", manifest);
+        return this.loadManifest(manifest);
+    };
+
+    public stop() {
+        return Promise.resolve();
+    }
+
+    private loadManifest(manifest: Mp4Manifest) {
+        // var init = new shaka.media.InitSegmentReference(getUris, 0, null);
+        return {
+            minBufferTime: 10,  // seconds
+            offlineSessionIds: [],
+            periods: [
+                {
+                    startTime: 0,  // seconds, relative to presentation
+                    variants: [
+                        {
+                            id: id++,  // globally unique ID
+                            language: "en",
+                            primary: false,
+                            video: {
+                                id: id++,  // globally unique ID
+                                mimeType: "video/mp4",
+                                codecs: "x264",
+                                language: "en",
+                                label: manifest.title,
+                                type: "video",
+                                encrypted: false
+                            }
+                        }
+                    ],
+                    textStreams: manifest.textTracks.map(textTrack => ({
+                        id: id++,  // globally unique ID
+                        mimeType: "text/vtt",
+                        codecs: "",
+                        kind: "subtitles",
+                        encrypted: false,
+                        keyId: null,
+                        language: textTrack.language,
+                        label: textTrack.displayName,
+                        type: "text"
+                    }))
+                }
+            ]
+        };
+    };
 }
 
 const uiConfig = {
@@ -64,6 +136,14 @@ const initPlayer = async (
     videoRef.volume = props.volume;
     try {
         // await player.load(props.mpd, props.time);
+        const manifest: Mp4Manifest = {
+            title: props.title,
+            path: props.src,
+            textTracks: props.textTracks,
+            time: props.time
+        };
+
+        // await player.load(manifest, props.time, "manifest/mp4");
         await player.load(props.src, props.time, 'video/mp4');
         setUI(ui);
         setPlayer(player);
